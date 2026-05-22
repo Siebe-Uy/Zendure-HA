@@ -27,7 +27,9 @@ from homeassistant.loader import async_get_integration
 from .api import Api
 from .const import (
     CONF_AUTO_MQTT_USER,
+    CONF_DISCOVER_METERS,
     CONF_P1METER,
+    CONF_P1METER_DEFAULT,
     DOMAIN,
     DeviceState,
     ManagerMode,
@@ -35,6 +37,7 @@ from .const import (
     SmartMode,
 )
 from .device import DeviceSettings, ZendureDevice, ZendureLegacy
+from .devices.smart_meter_p1 import ZendureMeter
 from .entity import EntityDevice
 from .fusegroup import FuseGroup
 from .number import ZendureRestoreNumber
@@ -111,12 +114,24 @@ class ZendureManager(DataUpdateCoordinator[None], EntityDevice):
         self.totalKwh = ZendureSensor(self, "total_kwh", None, "kWh", "energy_storage", "measurement", 2)
         self.power = ZendureSensor(self, "power", None, "W", "power", "measurement", 0)
 
+        device_list = data.get("deviceList", [])
+        _LOGGER.info("Zendure API returned %s device(s)", len(device_list))
+        for dev in device_list:
+            _LOGGER.info(
+                "Zendure deviceList: productModel=%s deviceName=%s deviceKey=%s",
+                dev.get("productModel"),
+                dev.get("deviceName"),
+                dev.get("deviceKey"),
+            )
+
+        Api.hass = self.hass
+
         # load devices
-        for dev in data["deviceList"]:
+        for dev in device_list:
             try:
                 if (deviceId := dev["deviceKey"]) is None or (prodModel := dev["productModel"]) is None:
                     continue
-                _LOGGER.info("Adding device: %s %s => %s", deviceId, prodModel, dev)
+                _LOGGER.info("Adding device: %s (%s)", deviceId, prodModel)
 
                 init = Api.createdevice.get(prodModel.lower().strip(), None)
                 if init is None:
@@ -125,8 +140,9 @@ class ZendureManager(DataUpdateCoordinator[None], EntityDevice):
 
                 # create the device and mqtt server
                 device = init(self.hass, deviceId, dev.get("deviceName", prodModel), dev)
-                device.discharge_start = device.discharge_limit // 10
-                device.discharge_optimal = device.discharge_limit // 4
+                if not isinstance(device, ZendureMeter):
+                    device.discharge_start = device.discharge_limit // 10
+                    device.discharge_optimal = device.discharge_limit // 4
                 Api.devices[deviceId] = device
 
                 # Check if we should automatically manage MQTT users (opt-in)
@@ -162,7 +178,13 @@ class ZendureManager(DataUpdateCoordinator[None], EntityDevice):
         # initialize the api & p1 meter
         self.api.Init(self.config_entry.data, mqtt)
         await self.update_fusegroups()
-        self.update_p1meter(self.config_entry.data.get(CONF_P1METER, "sensor.power_actual"))
+        p1meter = self.config_entry.data.get(CONF_P1METER, CONF_P1METER_DEFAULT)
+        if p1meter == CONF_P1METER_DEFAULT:
+            meters = [d for d in Api.devices.values() if isinstance(d, ZendureMeter)]
+            if len(meters) == 1:
+                p1meter = meters[0].suggested_p1_entity_id
+                _LOGGER.info("Using Zendure meter for Manager grid power: %s", p1meter)
+        self.update_p1meter(p1meter)
         await asyncio.sleep(1)  # allow other tasks to run
 
     async def update_fusegroups(self) -> None:
@@ -174,6 +196,8 @@ class ZendureManager(DataUpdateCoordinator[None], EntityDevice):
 
         fuseGroups: dict[str, FuseGroup] = {}
         for device in self.devices:
+            if isinstance(device, ZendureMeter):
+                continue
             try:
                 if device.fuseGroup.onchanged is None:
                     device.fuseGroup.onchanged = updateFuseGroup
@@ -211,6 +235,8 @@ class ZendureManager(DataUpdateCoordinator[None], EntityDevice):
 
         # Update the fusegroups and select optins for each device
         for device in self.devices:
+            if isinstance(device, ZendureMeter):
+                continue
             try:
                 fusegroups: dict[Any, str] = {
                     0: "unused",
@@ -233,6 +259,8 @@ class ZendureManager(DataUpdateCoordinator[None], EntityDevice):
 
         # Add devices to fusegroups
         for device in self.devices:
+            if isinstance(device, ZendureMeter):
+                continue
             if fg := fuseGroups.get(device.fuseGroup.value):
                 device.fuseGrp = fg
                 fg.devices.append(device)
@@ -255,18 +283,23 @@ class ZendureManager(DataUpdateCoordinator[None], EntityDevice):
 
         self.operation = operation
         if self.p1meterEvent is not None:
-            if operation != ManagerMode.OFF and (len(self.devices) == 0 or all(not d.online for d in self.devices)):
+            power_devices = self._power_devices()
+            if operation != ManagerMode.OFF and (len(power_devices) == 0 or all(not d.online for d in power_devices)):
                 _LOGGER.warning("No devices online, not possible to start the operation")
                 persistent_notification.async_create(self.hass, "No devices online, not possible to start the operation", "Zendure", "zendure_ha")
                 return
 
             match self.operation:
                 case ManagerMode.OFF:
-                    if len(self.devices) > 0:
-                        for d in self.devices:
-                            await d.power_off()
+                    for d in self._power_devices():
+                        await d.power_off()
+
+    def _power_devices(self) -> list[ZendureDevice]:
+        """Devices that participate in Zendure Manager power control."""
+        return [d for d in self.devices if not isinstance(d, ZendureMeter)]
 
     async def _async_update_data(self) -> None:
+        self.devices = list(Api.devices.values())
 
         def isBleDevice(device: ZendureDevice, si: bluetooth.BluetoothServiceInfoBleak) -> bool:
             for d in si.manufacturer_data.values():

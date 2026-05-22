@@ -14,7 +14,8 @@
         "data": {
           "username": "Zendure Gebruikersnaam",
           "password": "Zendure Wachtwoord",
-          "p1meter": "P1 Sensor voor slimme matching",
+          "p1meter": "Netvermogen-sensor voor Zendure Manager (extern of Zendure-meter)",
+          "discover_meters": "Slimme Meter P1 ontdekken via cloud MQTT",
           "mqttlog": "MQTT-Communicatie loggen",
           "mqttlocal": "Lokale MQTT gebruiken",
           "auto_mqtt_user": "MQTT-gebruikers automatisch beheren",
@@ -37,7 +38,8 @@
         "data": {
           "username": "Zendure Gebruikersnaam",
           "password": "Zendure Wachtwoord",
-          "p1meter": "P1 Sensor voor slimme matching",
+          "p1meter": "Netvermogen-sensor voor Zendure Manager (extern of Zendure-meter)",
+          "discover_meters": "Slimme Meter P1 ontdekken via cloud MQTT",
           "mqttlog": "MQTT-Communicatie loggen",
           "mqttlocal": "Lokale MQTT gebruiken",
           "auto_mqtt_user": "MQTT-gebruikers automatisch beheren",

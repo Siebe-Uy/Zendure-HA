@@ -3,7 +3,7 @@
 </p>
 
 # Zendure Home Assistant Integration
-This Home Assistant integration connects your Zendure devices to Home Assistant, making all reported parameters available as entities. You can track battery levels, power input/output, manage charging settings, and integrate your Zendure devices into your home automation routines. The integration also provides a power manager feature that can help balance energy usage across multiple devices when a P1 meter entity is supplied.
+This Home Assistant integration connects your Zendure devices to Home Assistant, making all reported parameters available as entities. You can track battery levels, power input/output, manage charging settings, and integrate your Zendure devices into your home automation routines. The integration also provides a power manager feature that can help balance energy usage across multiple devices when a grid-power sensor is supplied (your Zendure Smart Meter P1 or an external P1/DSMR sensor).
 
 
 [![hacs][hacsbadge]][hacs] [![releasebadge]][release] [![License][license-shield]](LICENSE.md) [![hainstall][hainstallbadge]][hainstall]
@@ -41,6 +41,17 @@ This Home Assistant integration connects your Zendure devices to Home Assistant,
   - SF2400 Pro
   - SuperBase V6400 (?)
   - SuperBase V4600 not yet supported using the token
+  - Smart Meter P1 (and SmartMeter3CT-style grid meters)
+
+### Smart Meter P1
+
+The **Zendure Smart Meter P1** (P1 reader + Wi‑Fi bridge) can appear as its own device in the Zendure app. Home Assistant loads it when Zendure’s HA API returns it in `deviceList`, or when **Discover meters via MQTT** is enabled and the meter publishes on the cloud broker.
+
+- Grid power is exposed as sensors (typically `grid_power` in watts). Import is positive, export negative—matching Zendure Manager expectations.
+- If you leave the Manager “grid power sensor” at the default placeholder and exactly one Zendure meter is loaded, Manager uses that meter’s `grid_power` sensor automatically.
+- Otherwise pick any Home Assistant power sensor (Homewizard, DSMR, Shelly, etc.) in setup or options.
+
+**Troubleshooting:** After reload, check **Settings → System → Logs** for `Zendure deviceList:` lines (one per app device). If the P1 is missing there, enable **Log MQTT communication** and confirm `Topic: iot/…` lines for the meter; discovery can still create the device from MQTT. If there is no MQTT traffic for the meter, it may only talk to your inverter over LoRa—in that case use grid-power sensors on the paired SolarFlow/Hyper device or a standalone P1 integration.
 
 - **Device Automation:**
   - Cheap hours.

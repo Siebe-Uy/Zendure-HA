@@ -21,6 +21,7 @@ from paho.mqtt import enums as mqtt_enums
 
 from .const import (
     CONF_APPTOKEN,
+    CONF_DISCOVER_METERS,
     CONF_HAKEY,
     CONF_MQTTLOG,
     CONF_MQTTPORT,
@@ -32,6 +33,7 @@ from .const import (
     DOMAIN,
 )
 from .device import ZendureDevice
+from .devices.smart_meter_p1 import ZendureMeter
 from .devices.ace1500 import ACE1500
 from .devices.aio2400 import AIO2400
 from .devices.hub1200 import Hub1200
@@ -72,7 +74,17 @@ class Api:
         "solarflow 2400 pro": SolarFlow2400Pro,
         "superbase v6400": SuperBaseV6400,
         "superbase v4600": SuperBaseV4600,
+        "smart meter p1": ZendureMeter,
+        "smartmeter p1": ZendureMeter,
+        "slimme meter p1": ZendureMeter,
+        "p1 reader": ZendureMeter,
+        "p1 meter": ZendureMeter,
+        "smart meter": ZendureMeter,
+        "smartmeter3ct": ZendureMeter,
+        "smart meter 3ct": ZendureMeter,
     }
+    hass: HomeAssistant | None = None
+    mqttDiscover: bool = False
     mqttCloud = mqtt_client.Client(userdata="cloud")
     mqttLocal = mqtt_client.Client(userdata="local")
     mqttLogging: bool = False
@@ -89,6 +101,7 @@ class Api:
     def Init(self, data: Mapping[str, Any], mqtt: Mapping[str, Any]) -> None:
         """Initialize Zendure Api."""
         Api.mqttLogging = data.get(CONF_MQTTLOG, False)
+        Api.mqttDiscover = data.get(CONF_DISCOVER_METERS, True)
         Api.mqttCloud.__init__(mqtt_enums.CallbackAPIVersion.VERSION2, mqtt["clientId"], False, "cloud", mqtt_enums.MQTTProtocolVersion.MQTTv31)
         url = mqtt["url"]
         Api.cloudServer, Api.cloudPort = url.rsplit(":", 1) if ":" in url else (url, "1883")
@@ -218,6 +231,54 @@ class Api:
             for device in self.devices.values():
                 client.subscribe(f"/{device.prodkey}/{device.deviceId}/#")
                 client.subscribe(f"iot/{device.prodkey}/{device.deviceId}/#")
+            if userdata == "cloud" and Api.mqttDiscover:
+                client.subscribe("iot/#")
+
+    @staticmethod
+    def _is_meter_product_key(product_key: str) -> bool:
+        """Return True if the MQTT product key likely identifies a grid meter."""
+        hints = ("meter", "p1", "smartmeter", "ct", "slimme")
+        pk = product_key.lower()
+        return any(h in pk for h in hints)
+
+    @staticmethod
+    def _is_meter_payload(payload: Mapping[str, Any]) -> bool:
+        """Return True if the MQTT payload likely identifies a grid meter."""
+        product = str(payload.get("product", "")).lower()
+        if any(h in product for h in ("meter", "p1", "smartmeter")):
+            return True
+        props = payload.get("properties")
+        if isinstance(props, dict):
+            meter_keys = {"gridPower", "gridInputPower", "energyPower", "totalPower", "activePower"}
+            if meter_keys.intersection(props.keys()):
+                return True
+        return False
+
+    def _discover_meter_device(self, product_key: str, device_id: str, payload: Mapping[str, Any]) -> ZendureMeter | None:
+        """Create and register a ZendureMeter from an MQTT message when not in deviceList."""
+        if Api.hass is None or device_id in self.devices:
+            return None
+        if not self._is_meter_product_key(product_key) and not self._is_meter_payload(payload):
+            return None
+
+        props = payload.get("properties", {}) if isinstance(payload.get("properties"), dict) else {}
+        sn = props.get("sn") or payload.get("sn") or device_id
+        definition: dict[str, Any] = {
+            "productKey": product_key,
+            "snNumber": str(sn),
+            "productModel": str(payload.get("productModel", "smart meter p1")),
+            "deviceName": str(payload.get("deviceName", "Smart Meter P1")),
+        }
+        device = ZendureMeter(Api.hass, device_id, definition["deviceName"], definition)
+        self.devices[device_id] = device
+        Api.mqttCloud.subscribe(f"iot/{product_key}/{device_id}/#")
+        _LOGGER.info(
+            "Discovered Zendure meter %s (productModel=%s, productKey=%s)",
+            device.name,
+            definition["productModel"],
+            product_key,
+        )
+        return device
 
     def mqttDisconnect(self, _client: Any, userdata: Any, _flags: Any, rc: Any, _props: Any) -> None:
         _LOGGER.info("Client %s disconnected to MQTT broker, return code: %s", userdata, rc)
@@ -234,26 +295,33 @@ class Api:
                 return
 
             deviceId = topics[2]
+            product_key = topics[1]
 
-            if (device := self.devices.get(deviceId, None)) is not None:
-                try:
-                    payload = json.loads(msg.payload.decode())
-                except json.JSONDecodeError as err:
-                    _LOGGER.error("Failed to decode JSON from device %s: %s", deviceId, err)
-                    return
-                except UnicodeDecodeError as err:
-                    _LOGGER.error("Failed to decode payload encoding from device %s: %s", deviceId, err)
-                    return
+            try:
+                payload = json.loads(msg.payload.decode())
+            except json.JSONDecodeError as err:
+                _LOGGER.error("Failed to decode JSON from device %s: %s", deviceId, err)
+                return
+            except UnicodeDecodeError as err:
+                _LOGGER.error("Failed to decode payload encoding from device %s: %s", deviceId, err)
+                return
 
-                if "isHA" in payload:
-                    return
+            if "isHA" in payload:
+                return
 
+            device = self.devices.get(deviceId, None)
+            if device is None and Api.mqttDiscover and topics[0] == "iot" and topics[3] == "properties/report":
+                device = self._discover_meter_device(product_key, deviceId, payload)
+
+            if device is not None:
                 if self.mqttLogging:
                     _LOGGER.info("Topic: %s => %s", msg.topic.replace(device.deviceId, device.name).replace(device.snNumber, "snxxx"), payload)
 
                 if device.mqttMessage(topics[3], payload) and device.mqtt != client:
                     device.mqtt = client
                     device.setStatus()
+            elif Api.mqttDiscover and Api.mqttLogging:
+                _LOGGER.debug("Cloud message from unknown device %s on %s", deviceId, msg.topic)
 
         except Exception:
             _LOGGER.exception("Unexpected error in MQTT cloud message handler")

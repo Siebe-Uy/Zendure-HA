@@ -13,7 +13,8 @@
       "user": {
         "data": {
           "token": "Zendure Token",
-          "p1meter": "P1 Sensor for smart matching",
+          "p1meter": "Grid power sensor for Zendure Manager (external or Zendure meter)",
+          "discover_meters": "Discover Smart Meter P1 via cloud MQTT",
           "mqttlog": "Log MQTT communication",
           "mqttlocal": "Use local MQTT",
           "auto_mqtt_user": "Automatically manage MQTT users",
@@ -35,7 +36,8 @@
       "reconfigure": {
         "data": {
           "token": "Zendure Token",
-          "p1meter": "P1 Sensor for smart matching",
+          "p1meter": "Grid power sensor for Zendure Manager (external or Zendure meter)",
+          "discover_meters": "Discover Smart Meter P1 via cloud MQTT",
           "mqttlog": "Log MQTT communication",
           "mqttlocal": "Use local MQTT",
           "auto_mqtt_user": "Automatically manage MQTT users",
@@ -49,7 +51,8 @@
     "step": {
       "init": {
         "data": {
-          "p1meter": "P1 Sensor for smart matching",
+          "p1meter": "Grid power sensor for Zendure Manager (external or Zendure meter)",
+          "discover_meters": "Discover Smart Meter P1 via cloud MQTT",
           "mqttlog": "Log MQTT communication",
           "auto_mqtt_user": "Automatically manage MQTT users"
         },
