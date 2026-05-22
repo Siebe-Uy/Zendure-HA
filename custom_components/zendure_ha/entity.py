@@ -185,6 +185,19 @@ class EntityDevice:
 
     empty = EntityZendure(None, "empty")
 
+    @staticmethod
+    def _load_check_entity_sync() -> dict[str, str]:
+        """Load entity translation keys from en.json (run in executor)."""
+        path = Path(__file__).parent / "translations" / "en.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return {key: domain for domain, keys in data.get("entity", {}).items() for key in keys}
+
+    @classmethod
+    async def async_prepare(cls, hass: HomeAssistant) -> None:
+        """Load entity translation map without blocking the event loop."""
+        if cls.checkEntity is None:
+            cls.checkEntity = await hass.async_add_executor_job(cls._load_check_entity_sync)
+
     def __init__(
         self,
         hass: HomeAssistant,
@@ -226,14 +239,14 @@ class EntityDevice:
 
     def check_entities(self, di: DeviceEntry, name: str) -> None:
         if EntityDevice.checkEntity is None:
-            _t = json.loads((Path(__file__).parent / "translations" / "en.json").read_text())
-            EntityDevice.checkEntity = {key: domain for domain, keys in _t.get("entity", {}).items() for key in keys}
+            _LOGGER.warning("Entity translation map not loaded; call EntityDevice.async_prepare first")
+            return
 
         # Get all entities for this device and group them by translation_key if they match the current device and platform
         entity_registry = er.async_get(self.hass)
         ed: dict[str, list[er.RegistryEntry]] = {}
         for entity in er.async_entries_for_device(entity_registry, di.id, True):
-            if entity.platform == DOMAIN and (dn := self.checkEntity.get(entity.translation_key)) is not None and dn == entity.domain:
+            if entity.platform == DOMAIN and (dn := EntityDevice.checkEntity.get(entity.translation_key)) is not None and dn == entity.domain:
                 ed.setdefault(entity.translation_key, []).append(entity)
 
         # check al entities
