@@ -22,6 +22,7 @@ from .const import (
     CONF_MQTTPSW,
     CONF_MQTTSERVER,
     CONF_MQTTUSER,
+    CONF_P1_METER_HOST,
     CONF_P1METER,
     CONF_P1METER_DEFAULT,
     CONF_SIM,
@@ -44,6 +45,7 @@ class ZendureConfigFlow(ConfigFlow, domain=DOMAIN):
         {
             vol.Required(CONF_APPTOKEN): str,
             vol.Required(CONF_P1METER, description={"suggested_value": CONF_P1METER_DEFAULT}): selector.EntitySelector(),
+            vol.Optional(CONF_P1_METER_HOST, default=""): str,
             vol.Required(CONF_MQTTLOG): bool,
             vol.Optional(CONF_DISCOVER_METERS, default=True): bool,
             vol.Required(CONF_MQTTLOCAL): bool,
@@ -165,6 +167,7 @@ class ZendureOptionsFlowHandler(OptionsFlow):
         options_schema = vol.Schema(
             {
                 vol.Required(CONF_P1METER, default=self.config_entry.data.get(CONF_P1METER, CONF_P1METER_DEFAULT)): str,
+                vol.Optional(CONF_P1_METER_HOST, default=self.config_entry.data.get(CONF_P1_METER_HOST, "")): str,
                 vol.Required(CONF_MQTTLOG, default=self.config_entry.data[CONF_MQTTLOG]): bool,
                 vol.Optional(CONF_DISCOVER_METERS, default=self.config_entry.data.get(CONF_DISCOVER_METERS, True)): bool,
                 vol.Optional(CONF_AUTO_MQTT_USER, default=self.config_entry.data.get(CONF_AUTO_MQTT_USER, False)): bool,

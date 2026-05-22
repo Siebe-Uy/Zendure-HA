@@ -14,6 +14,7 @@
         "data": {
           "token": "Zendure Token",
           "p1meter": "Grid power sensor for Zendure Manager (external or Zendure meter)",
+          "p1_meter_host": "Smart Meter P1 bridge IP or hostname (local HTTP)",
           "discover_meters": "Discover Smart Meter P1 via cloud MQTT",
           "mqttlog": "Log MQTT communication",
           "mqttlocal": "Use local MQTT",
@@ -37,6 +38,7 @@
         "data": {
           "token": "Zendure Token",
           "p1meter": "Grid power sensor for Zendure Manager (external or Zendure meter)",
+          "p1_meter_host": "Smart Meter P1 bridge IP or hostname (local HTTP)",
           "discover_meters": "Discover Smart Meter P1 via cloud MQTT",
           "mqttlog": "Log MQTT communication",
           "mqttlocal": "Use local MQTT",
@@ -52,6 +54,7 @@
       "init": {
         "data": {
           "p1meter": "Grid power sensor for Zendure Manager (external or Zendure meter)",
+          "p1_meter_host": "Smart Meter P1 bridge IP or hostname (local HTTP)",
           "discover_meters": "Discover Smart Meter P1 via cloud MQTT",
           "mqttlog": "Log MQTT communication",
           "auto_mqtt_user": "Automatically manage MQTT users"

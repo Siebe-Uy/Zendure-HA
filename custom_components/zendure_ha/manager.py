@@ -28,6 +28,7 @@ from .api import Api
 from .const import (
     CONF_AUTO_MQTT_USER,
     CONF_DISCOVER_METERS,
+    CONF_P1_METER_HOST,
     CONF_P1METER,
     CONF_P1METER_DEFAULT,
     DOMAIN,
@@ -172,6 +173,8 @@ class ZendureManager(DataUpdateCoordinator[None], EntityDevice):
                 _LOGGER.error("Unable to create device %s!", e)
                 _LOGGER.error(traceback.format_exc())
 
+        self._load_local_p1_meter()
+
         self.devices = list(Api.devices.values())
         _LOGGER.info("Loaded %s devices", len(self.devices))
 
@@ -186,6 +189,26 @@ class ZendureManager(DataUpdateCoordinator[None], EntityDevice):
                 _LOGGER.info("Using Zendure meter for Manager grid power: %s", p1meter)
         self.update_p1meter(p1meter)
         await asyncio.sleep(1)  # allow other tasks to run
+
+    def _load_local_p1_meter(self) -> None:
+        """Add Smart Meter P1 when a local bridge IP/hostname is configured."""
+        host = (self.config_entry.data.get(CONF_P1_METER_HOST) or "").strip()
+        if not host:
+            return
+        if any(isinstance(d, ZendureMeter) and d.ipAddress == host for d in Api.devices.values()):
+            return
+
+        definition: dict[str, Any] = {
+            "productKey": "p1meter",
+            "snNumber": host,
+            "productModel": "smart meter p1",
+            "deviceName": "Smart Meter P1",
+            "ip": host,
+        }
+        device_id = "p1_meter_local"
+        device = ZendureMeter(self.hass, device_id, definition["deviceName"], definition)
+        Api.devices[device_id] = device
+        _LOGGER.info("Added local Smart Meter P1 at http://%s/properties/report", host)
 
     async def update_fusegroups(self) -> None:
         _LOGGER.info("Update fusegroups")

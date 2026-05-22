@@ -51,7 +51,9 @@ The **Zendure Smart Meter P1** (P1 reader + Wi‑Fi bridge) can appear as its ow
 - If you leave the Manager “grid power sensor” at the default placeholder and exactly one Zendure meter is loaded, Manager uses that meter’s `grid_power` sensor automatically.
 - Otherwise pick any Home Assistant power sensor (Homewizard, DSMR, Shelly, etc.) in setup or options.
 
-**Troubleshooting:** After reload, check **Settings → System → Logs** for `Zendure deviceList:` lines (one per app device). If the P1 is missing there, enable **Log MQTT communication** and confirm `Topic: iot/…` lines for the meter; discovery can still create the device from MQTT. If there is no MQTT traffic for the meter, it may only talk to your inverter over LoRa—in that case use grid-power sensors on the paired SolarFlow/Hyper device or a standalone P1 integration.
+**Local HTTP (P1 bridge on your LAN):** Many P1 bridges expose data at `http://<bridge-ip>/properties/report` (zenSDK-style). In integration setup or options, set **Smart Meter P1 bridge IP or hostname** to e.g. `192.168.0.212`. The integration polls every 60s and creates sensors such as `total_power`, `a_aprt_power`, `b_aprt_power`, and `c_aprt_power` (watts; import positive).
+
+**Troubleshooting:** After reload, check **Settings → System → Logs** for `Zendure deviceList:` lines (one per app device). If the P1 is missing there, set the bridge IP as above or enable **Log MQTT communication** and confirm `Topic: iot/…` lines for the meter. If there is no MQTT traffic and no local HTTP, the reader may only talk to your inverter over LoRa—in that case use grid-power sensors on the paired SolarFlow/Hyper device or a standalone P1 integration.
 
 - **Device Automation:**
   - Cheap hours.
