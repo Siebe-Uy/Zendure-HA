@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -18,6 +18,15 @@ _LOGGER = logging.getLogger(__name__)
 
 # Keys skipped when applying a local HTTP /properties/report payload.
 _HTTP_META_KEYS = frozenset({"timestamp", "messageId", "deviceId"})
+
+
+class _MeterHemsStub:
+    """Stub so shared ZendureDevice code paths never require a HEMS binary sensor."""
+
+    is_on = False
+
+    def update_value(self, _value: Any) -> None:
+        return
 
 # Sensor keys tried in order for Zendure Manager grid-power input.
 PRIMARY_POWER_KEYS = (
@@ -48,6 +57,8 @@ class ZendureMeter(ZendureDevice):
 
     def create_entities(self) -> None:
         """Create minimal entities; other keys are created dynamically from telemetry."""
+        self.hemsState = _MeterHemsStub()
+        self.hemsStateUpdated = datetime.min
         self.connectionStatus = ZendureSensor(self, "connectionStatus")
         self.totalPower = ZendureSensor(self, "total_power", None, "W", "power", "measurement")
         self.gridPower = ZendureSensor(self, "gridPower", None, "W", "power", "measurement")
@@ -152,10 +163,25 @@ class ZendureMeter(ZendureDevice):
             self.setStatus()
         return changed
 
+    def mqttMessage(self, topic: str, payload: Any) -> bool:
+        """Handle MQTT without touching battery-only HEMS state on ZendureDevice."""
+        if topic == "properties/energy":
+            return True
+        return ZendureDevice.mqttMessage(self, topic, payload)
+
     async def mqttProperties(self, payload: Any) -> None:
         """Handle cloud MQTT payloads (properties object) or flat HTTP-style bodies."""
         if isinstance(payload, dict) and "properties" not in payload and "total_power" in payload:
             await self.httpProperties(payload)
             return
-        await super().mqttProperties(payload)
+
+        if self.lastseen == datetime.min:
+            self.setStatus()
+        else:
+            self.lastseen = datetime.now() + timedelta(minutes=5)
+
+        if properties := payload.get("properties"):
+            for key, value in properties.items():
+                self.entityUpdate(key, value)
+
         self.setStatus()
