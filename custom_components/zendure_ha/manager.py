@@ -349,7 +349,7 @@ class ZendureManager(DataUpdateCoordinator[None], EntityDevice):
 
             _LOGGER.debug("Update device: %s (%s)", device.name, device.deviceId)
             await device.dataRefresh(self.update_count)
-            if device.hemsState.is_on and (time - device.hemsStateUpdated).total_seconds() > SmartMode.HEMSOFF_TIMEOUT:
+            if not isinstance(device, ZendureMeter) and device.hemsState.is_on and (time - device.hemsStateUpdated).total_seconds() > SmartMode.HEMSOFF_TIMEOUT:
                 device.hemsState.update_value(0)
             device.setStatus()
         self.update_count += 1
