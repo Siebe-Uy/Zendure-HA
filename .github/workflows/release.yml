@@ -1,57 +1,68 @@
-# This GitHub action workflow is meant to be copyable to any repo that have the same structure.
-# - Your integration exist under custom_components/{INTEGRATION_NAME}/[integration files]
-# - You are using GitHub releases to publish new versions
+# Builds zendure_ha.zip for GitHub Releases (optional; HACS installs from the repo tree).
+# Publish a release: git tag v1.0.1 && git push origin v1.0.1
+# Or create a release in the GitHub UI; the workflow attaches the zip when published.
 
 name: Release Workflow
 
 on:
   release:
     types: [published]
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
 
 jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 Checkout the repository
-        uses: actions/checkout@v6
+      - name: Checkout the repository
+        uses: actions/checkout@v4
 
-      - name: 🔢 Get release version
+      - name: Get release version
         id: version
         uses: home-assistant/actions/helpers/version@master
 
-      - name: ℹ️ Get integration information
+      - name: Get integration information
         id: information
         run: |
-          name=$(find custom_components/ -type d -maxdepth 1 | tail -n 1 | cut -d "/" -f2)
+          name=$(find custom_components/ -type d -mindepth 1 -maxdepth 1 | head -1 | xargs basename)
           echo "name=$name" >> $GITHUB_OUTPUT
 
-      - name: 🖊️ Set version number
+      - name: Set version number in manifest
         run: |
-          jq '.version = "${{ steps.version.outputs.version }}"' \
+          jq --arg v "${{ steps.version.outputs.version }}" '.version = $v' \
             "${{ github.workspace }}/custom_components/${{ steps.information.outputs.name }}/manifest.json" > tmp \
             && mv -f tmp "${{ github.workspace }}/custom_components/${{ steps.information.outputs.name }}/manifest.json"
 
-      - name: 👀 Validate data
+      - name: Validate manifest version
         run: |
-          manifestversion=$(jq -r '.version' ${{ github.workspace }}/custom_components/${{ steps.information.outputs.name }}/manifest.json)
+          manifestversion=$(jq -r '.version' "${{ github.workspace }}/custom_components/${{ steps.information.outputs.name }}/manifest.json")
           if [ "$manifestversion" != "${{ steps.version.outputs.version }}" ]; then
-            echo "The version in custom_components/${{ steps.information.outputs.name }}/manifest.json was not correct"
-            echo "$manifestversion"
+            echo "manifest.json version ($manifestversion) does not match release (${{ steps.version.outputs.version }})"
             exit 1
           fi
 
-      - name: 📦 Create zip file for the integration
+      - name: Create zip file for the integration
         run: |
           cd "${{ github.workspace }}/custom_components/${{ steps.information.outputs.name }}"
-          zip ${{ steps.information.outputs.name }}.zip -r ./
+          zip -r "${{ steps.information.outputs.name }}.zip" .
 
-      - name: 📤 Upload the zip file as a release asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload zip to GitHub Release (tag push)
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
         with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: "${{ github.workspace }}/custom_components/${{ steps.information.outputs.name }}/${{ steps.information.outputs.name }}.zip"
-          asset_name: ${{ steps.information.outputs.name }}.zip
-          asset_content_type: application/zip
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          files: custom_components/${{ steps.information.outputs.name }}/${{ steps.information.outputs.name }}.zip
+          generate_release_notes: true
+
+      - name: Upload zip to GitHub Release (published release)
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name }}
+          files: custom_components/${{ steps.information.outputs.name }}/${{ steps.information.outputs.name }}.zip

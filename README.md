@@ -74,6 +74,14 @@ To install via HACS:
 
    [![Set up a new integration in Home Assistant](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=zendure_ha)
 
+#### Custom repository (forks)
+
+If you add a **custom HACS repository** (for example `https://github.com/Siebe-Uy/Zendure-HA`):
+
+- Choose the **default branch** or a **release tag** (for example `v1.0.1`), not a raw commit hash, when HACS asks for a version.
+- This integration installs from the repository tree (`zip_release` is disabled). You do **not** need a `zendure_ha.zip` release asset for HACS to work.
+- Optional: push a version tag (`git tag v1.0.1 && git push origin v1.0.1`) to create a GitHub Release with `zendure_ha.zip` attached by the release workflow.
+
 
 ## Contributing
 
