@@ -28,6 +28,7 @@ from .api import Api
 from .const import (
     CONF_AUTO_MQTT_USER,
     CONF_P1METER,
+    CONF_P1METER_IP,
     DOMAIN,
     DeviceState,
     ManagerMode,
@@ -114,6 +115,8 @@ class ZendureManager(DataUpdateCoordinator[None], EntityDevice):
         self.power = ZendureSensor(self, "power", None, "W", "power", "measurement", 0)
         self.globalSoc = ZendureSensor(self, "global_soc", None, "%", "battery", "measurement", 1)
 
+        ip = self.config_entry.data.get(CONF_P1METER_IP)
+
         # load devices
         for dev in data["deviceList"]:
             try:
@@ -122,9 +125,7 @@ class ZendureManager(DataUpdateCoordinator[None], EntityDevice):
                 _LOGGER.info("Adding device: %s %s => %s", deviceId, prodModel, dev)
 
                 if P1Meter.isP1Meter(prodModel):
-                    meter = P1Meter(self.hass, deviceId, dev.get("deviceName", prodModel), dev)
-                    meter.start()
-                    self.meters.append(meter)
+                    self.addMeter(deviceId, dev.get("deviceName", prodModel), dev | ({"ip": ip} if ip else {}))
                     continue
 
                 init = Api.createdevice.get(prodModel.lower().replace(" ", ""), None)
@@ -165,6 +166,10 @@ class ZendureManager(DataUpdateCoordinator[None], EntityDevice):
                 _LOGGER.error("Unable to create device %s!", e)
                 _LOGGER.error(traceback.format_exc())
 
+        # the P1 meter is not necessarily in the cloud device list, so fall back to the configured ip
+        if ip and not self.meters:
+            self.addMeter("p1meter", "Zendure P1 Meter", {"productModel": "P1 Meter", "ip": ip})
+
         self.devices = list(Api.devices.values())
         _LOGGER.info("Loaded %s devices", len(self.devices))
 
@@ -173,6 +178,11 @@ class ZendureManager(DataUpdateCoordinator[None], EntityDevice):
         await self.update_fusegroups()
         self.update_p1meter(self.config_entry.data.get(CONF_P1METER, "sensor.power_actual"))
         await asyncio.sleep(1)  # allow other tasks to run
+
+    def addMeter(self, deviceId: str, name: str, definition: dict[str, Any]) -> None:
+        meter = P1Meter(self.hass, deviceId, name, definition)
+        meter.start()
+        self.meters.append(meter)
 
     async def update_fusegroups(self) -> None:
         _LOGGER.info("Update fusegroups")

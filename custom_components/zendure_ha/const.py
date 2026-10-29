@@ -7,6 +7,7 @@ DOMAIN = "zendure_ha"
 
 CONF_APPTOKEN = "token"
 CONF_P1METER = "p1meter"
+CONF_P1METER_IP = "p1meter_ip"
 CONF_PRICE = "price"
 CONF_MQTTLOG = "mqttlog"
 CONF_MQTTLOCAL = "mqttlocal"
